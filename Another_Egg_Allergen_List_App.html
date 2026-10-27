@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17365d">
+<title>Another Egg Allergen List App</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#172033;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0}header{background:#17365d;color:#fff;padding:20px 16px 16px;position:sticky;top:0;z-index:5}
+h1{font-size:1.35rem;margin:0 0 5px}header p{font-size:.9rem;margin:0;opacity:.9}
+main{max-width:900px;margin:auto;padding:14px 12px 40px}.panel{background:#fff;border:1px solid #dce4ef;border-radius:14px;padding:15px;margin-bottom:13px}
+h2{font-size:1.1rem;margin:0 0 12px}.muted{color:#5a6678;font-size:.88rem;line-height:1.45}
+label.field{display:block;font-weight:650;font-size:.92rem;margin:12px 0 5px}
+input[type=text],textarea,select{width:100%;border:1px solid #bac7d8;border-radius:9px;padding:12px;font:inherit;font-size:16px;background:#fff;color:#172033}
+textarea{min-height:72px;resize:vertical}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+button{font:inherit;font-size:.94rem;font-weight:650;border:0;border-radius:9px;padding:12px 14px;background:#17365d;color:white;cursor:pointer}
+button.secondary{background:#e8eef7;color:#17365d}button.danger{background:#a62b3a;color:white}button.small{padding:8px 10px;font-size:.85rem}
+.search{margin-bottom:10px}
+.statusgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px}
+.allergen{border:1px solid #dce4ef;border-radius:10px;padding:10px;display:grid;grid-template-columns:1fr;gap:6px}
+.allergen strong{font-size:.9rem;line-height:1.25}
+.allergen select{padding:9px;font-size:.95rem}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.actions button{flex:1;min-width:120px}
+.counter{display:inline-block;background:#e8eef7;color:#17365d;border-radius:999px;padding:4px 9px;font-size:.8rem;font-weight:700}
+.record{border:1px solid #dce4ef;border-radius:10px;padding:12px;margin:9px 0}.record h3{margin:0 0 5px;font-size:1rem}.record p{margin:5px 0}.record .record-actions{display:flex;gap:8px;margin-top:10px}.record .record-actions button{flex:1}
+.badge{font-size:.8rem;border-radius:999px;padding:4px 8px;display:inline-block;margin:2px 3px 2px 0;background:#f0f2f5}
+.status-present{background:#ffe3e3;color:#8d1f2d}.status-absent{background:#dff5e7;color:#17653a}.status-unknown{background:#fff0cc;color:#7a5200}
+.hidden{display:none!important}.notice{background:#fff8e5;border:1px solid #f0d89b;padding:11px;border-radius:9px;font-size:.86rem;line-height:1.45}
+@media(min-width:650px){.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+@media print{header,.no-print,button{display:none!important}body{background:white}main{max-width:none;padding:0}.panel{border:0}}
+</style>
+</head>
+<body>
+<header><h1>Another Egg Allergen List App</h1><p>Menu records · 14 regulated allergens · Local storage</p></header>
+<main>
+<section class="panel">
+<h2 id="formTitle">Add menu item</h2>
+<div class="two">
+<div><label class="field" for="dishName">Dish / ingredient name *</label><input id="dishName" type="text" placeholder="e.g. Hojicha Tiramisu" autocomplete="off"></div>
+<div><label class="field" for="recordType">Record type</label><select id="recordType"><option>Menu item</option><option>Ingredient</option><option>Other</option></select></div>
+</div>
+<label class="field" for="notes">Recipe / supplier notes</label><textarea id="notes" placeholder="Optional: supplier, recipe version, cross-contact notes"></textarea>
+<p class="muted">For each allergen, choose Present, Confirmed absent, or Not yet verified. Do not assume a blank or unverified status means allergen-free.</p>
+<div id="allergenFields" class="statusgrid"></div>
+<div class="actions"><button id="saveBtn" type="button">Save item</button><button class="secondary" id="resetBtn" type="button">Clear form</button><button class="secondary hidden" id="cancelBtn" type="button">Cancel edit</button></div>
+</section>
+<section class="panel">
+<h2>Saved items <span class="counter" id="count">0</span></h2>
+<label class="field" for="searchBox">Search menu / ingredients</label><input class="search" id="searchBox" type="text" placeholder="Search by name, type or allergen">
+<div class="actions no-print"><button class="secondary" id="exportBtn" type="button">Export CSV</button><button class="secondary" id="backupBtn" type="button">Download backup</button><button class="secondary" id="importBtn" type="button">Import backup</button><button class="secondary" id="printBtn" type="button">Print list</button><input class="hidden" id="importFile" type="file" accept=".json,application/json"></div>
+<p class="muted">Items are stored in this browser on this device. Export a CSV or backup regularly. Browser data can be lost if website data is cleared or you switch browsers/devices.</p>
+<div id="records"></div>
+</section>
+<section class="panel">
+<h2>Food safety reminder</h2>
+<div class="notice">Verify every status against the current recipe, full supplier ingredient labels/specifications and cross-contact risks. Update records when recipes, suppliers or preparation methods change. This tool is a record-keeping aid and does not replace current Food Standards Agency guidance or staff training.</div>
+</section>
+</main>
+<script>
+const ALLERGENS = ["Celery", "Cereals containing gluten", "Crustaceans", "Eggs", "Fish", "Lupin", "Milk", "Molluscs", "Mustard", "Peanuts", "Sesame", "Soybeans", "Sulphur dioxide and sulphites", "Tree nuts"];
+const STORAGE_KEY = "cafeAllergenManager.records.v1";
+let items = [];
+let editingId = null;
+const $ = id => document.getElementById(id);
+function makeId(){return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,9)}
+function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");items=Array.isArray(x)?x:[]}catch(e){items=[]}}
+function persist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(items));return true}catch(e){alert("The browser could not save data. Please export a backup and check browser storage settings.");return false}}
+function buildFields(){const root=$("allergenFields");root.replaceChildren();ALLERGENS.forEach((name,i)=>{const box=document.createElement("div");box.className="allergen";const title=document.createElement("strong");title.textContent=(i+1)+". "+name;const sel=document.createElement("select");sel.id="a"+i;sel.setAttribute("aria-label",name);[["unknown","Not yet verified"],["present","Present"],["absent","Confirmed absent"]].forEach(([v,t])=>{const o=document.createElement("option");o.value=v;o.textContent=t;sel.append(o)});box.append(title,sel);root.append(box)})}
+function formData(){const name=$("dishName").value.trim();if(!name){alert("Please enter a dish or ingredient name.");$("dishName").focus();return null}const statuses={};ALLERGENS.forEach((a,i)=>statuses[a]=$("a"+i).value);return {id:editingId||makeId(),name,type:$("recordType").value,notes:$("notes").value.trim(),statuses,updated:new Date().toISOString()}}
+function resetForm(){editingId=null;$("dishName").value="";$("recordType").value="Menu item";$("notes").value="";ALLERGENS.forEach((a,i)=>$("a"+i).value="unknown");$("formTitle").textContent="Add menu item";$("saveBtn").textContent="Save item";$("cancelBtn").classList.add("hidden")}
+function saveItem(){const d=formData();if(!d)return;const idx=items.findIndex(x=>x.id===d.id);if(idx>=0)items[idx]=d;else items.unshift(d);persist();render();resetForm();window.scrollTo({top:0,behavior:"smooth"})}
+function editItem(id){const d=items.find(x=>x.id===id);if(!d)return;editingId=id;$("dishName").value=d.name;$("recordType").value=d.type||"Menu item";$("notes").value=d.notes||"";ALLERGENS.forEach((a,i)=>$("a"+i).value=(d.statuses&&d.statuses[a])||"unknown");$("formTitle").textContent="Edit menu item";$("saveBtn").textContent="Save changes";$("cancelBtn").classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})}
+function deleteItem(id){const d=items.find(x=>x.id===id);if(!d)return;if(confirm('Delete "'+d.name+'"? This cannot be undone unless you have a backup.')){items=items.filter(x=>x.id!==id);persist();render();if(editingId===id)resetForm()}}
+function badge(status){const span=document.createElement("span");span.className="badge "+(status==="present"?"status-present":status==="absent"?"status-absent":"status-unknown");span.textContent=status==="present"?"Present":status==="absent"?"Confirmed absent":"Not verified";return span}
+function render(){const q=$("searchBox").value.trim().toLowerCase();const root=$("records");root.replaceChildren();const filtered=items.filter(d=>[d.name,d.type,d.notes,...ALLERGENS.filter(a=>d.statuses&&d.statuses[a]==="present"),...ALLERGENS.filter(a=>d.statuses&&d.statuses[a]==="unknown")].join(" ").toLowerCase().includes(q));$("count").textContent=items.length;if(!filtered.length){const p=document.createElement("p");p.className="muted";p.textContent=items.length?"No matching items.":"No items saved yet. Add your first menu item above.";root.append(p);return}filtered.forEach(d=>{const card=document.createElement("article");card.className="record";const h=document.createElement("h3");h.textContent=d.name;card.append(h);const p=document.createElement("p");p.className="muted";p.textContent=(d.type||"Menu item")+" · Updated "+new Date(d.updated||Date.now()).toLocaleDateString("en-GB");card.append(p);const summary=document.createElement("div");const present=ALLERGENS.filter(a=>d.statuses&&d.statuses[a]==="present");const unknown=ALLERGENS.filter(a=>!d.statuses||!d.statuses[a]||d.statuses[a]==="unknown");if(present.length){const label=document.createElement("p");label.className="muted";label.textContent="Present:";summary.append(label);present.forEach(a=>summary.append(badge("present").replaceChildren?(()=>{const b=badge("present");b.textContent=a;return b})():badge("present")))}if(unknown.length){const label=document.createElement("p");label.className="muted";label.textContent="Not yet verified:";summary.append(label);unknown.forEach(a=>{const b=badge("unknown");b.textContent=a;summary.append(b)})}const absent=ALLERGENS.filter(a=>d.statuses&&d.statuses[a]==="absent");if(absent.length){const p2=document.createElement("p");p2.className="muted";p2.textContent=absent.length+" allergen(s) marked confirmed absent.";summary.append(p2)}card.append(summary);if(d.notes){const note=document.createElement("p");note.textContent="Notes: "+d.notes;card.append(note)}const actions=document.createElement("div");actions.className="record-actions no-print";const e=document.createElement("button");e.className="secondary";e.textContent="Edit";e.onclick=()=>editItem(d.id);const del=document.createElement("button");del.className="danger";del.textContent="Delete";del.onclick=()=>deleteItem(d.id);actions.append(e,del);card.append(actions);root.append(card)})}
+function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
+function exportCSV(){const headers=["Dish / ingredient","Record type","Notes",...ALLERGENS,"Last updated"];const rows=[headers,...items.map(d=>[d.name,d.type,d.notes,...ALLERGENS.map(a=>({present:"Present",absent:"Confirmed absent",unknown:"Not yet verified"}[(d.statuses||{})[a]||"unknown"])),d.updated||""])];const csv="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");downloadBlob(csv,"another-egg-allergen-list.csv","text/csv;charset=utf-8;")}
+function downloadBlob(data,name,type){const blob=new Blob([data],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function backup(){downloadBlob(JSON.stringify(items,null,2),"another-egg-allergen-list-backup.json","application/json")}
+function importBackup(file){const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(!Array.isArray(data))throw new Error();if(confirm("Import "+data.length+" records? This replaces the current records.")){items=data;persist();render();resetForm();alert("Backup imported.")}}catch(e){alert("This file is not a valid Another Egg Allergen List App JSON backup.")}};reader.readAsText(file)}
+$("saveBtn").addEventListener("click",saveItem);$("resetBtn").addEventListener("click",resetForm);$("cancelBtn").addEventListener("click",resetForm);$("searchBox").addEventListener("input",render);$("exportBtn").addEventListener("click",exportCSV);$("backupBtn").addEventListener("click",backup);$("importBtn").addEventListener("click",()=>$("importFile").click());$("importFile").addEventListener("change",e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=""});$("printBtn").addEventListener("click",()=>window.print());
+buildFields();load();render();
+</script>
+</body></html>
